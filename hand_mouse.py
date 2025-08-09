@@ -34,6 +34,7 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 gesture_state = "idle"
 cooldown      = 0
 relative_move = False
+last_gesture_time = 0
 
 scroll_mode   = False
 scroll_prev_y = 0
@@ -215,8 +216,12 @@ try:
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+        if gesture_state != "idle":
+            last_gesture_time = time.time()
+
         # Динамическое ограничение частоты кадров
-        target_fps = FPS_GESTURE if gesture_state != "idle" else FPS_IDLE
+        active_gesture = gesture_state != "idle" or (time.time() - last_gesture_time < 1.0)
+        target_fps = FPS_GESTURE if active_gesture else FPS_IDLE
         elapsed = time.time() - start_time
         sleep_time = max(0, 1.0 / target_fps - elapsed)
         if sleep_time > 0:
