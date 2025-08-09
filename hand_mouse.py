@@ -17,6 +17,10 @@ SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
 HORN_DEADZONE_PX     = 5    # «свободный ход» для жеста index+pinky
 PALM_Z_DIFF_THRESH   = 0.2   # max |z_5 - z_17|, чтобы ладонь была повернута к камере
 
+# Частоты кадров: базовая и при активном жесте
+FPS_IDLE             = 5
+FPS_GESTURE          = 30
+
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1,
                        min_detection_confidence=0.7,
@@ -183,9 +187,10 @@ try:
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-        # Ограничение частоты кадров до 10 FPS
+        # Динамическое ограничение частоты кадров
+        target_fps = FPS_GESTURE if gesture_state != "idle" else FPS_IDLE
         elapsed = time.time() - start_time
-        sleep_time = max(0, 0.1 - elapsed)
+        sleep_time = max(0, 1.0 / target_fps - elapsed)
         if sleep_time > 0:
             time.sleep(sleep_time)
 
