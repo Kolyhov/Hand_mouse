@@ -13,7 +13,8 @@ SMOOTHING_WINDOW     = 7
 SCROLL_SENSITIVITY   = 16     # сколько тиков ≈ 100 px
 SCROLL_AVG_FRAMES    = 4     # сколько последних Δy усредняем
 SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
-HORN_DEADZONE_PX     = 40    # «свободный ход» для жеста index+pinky
+# меньше свободный ход — жест «рога» срабатывает быстрее и надёжнее
+HORN_DEADZONE_PX     = 20    # «свободный ход» для жеста index+pinky
 PALM_Z_DIFF_THRESH   = 0.2   # max |z_5 - z_17|, чтобы ладонь была повернута к камере
 
 mp_hands = mp.solutions.hands
@@ -120,7 +121,10 @@ try:
                                 scroll_buf -= steps  # оставляем дробную часть
 
                 # ===== «рога» (index + pinky) → Ctrl+← / Ctrl+→ =====
-                elif up_cnt == 2 and idx and pinky and not scroll_mode:
+                # допускаем небольшие ошибки распознавания кольца,
+                # поэтому не проверяем up_cnt, а требуем лишь указательный
+                # и мизинец при опущенных большом и среднем пальцах
+                elif idx and pinky and not thumb and not mid and not scroll_mode:
                     if not horn_mode:                  # включаем режим
                         horn_mode = True
                         horn_ref_x = ix
@@ -139,7 +143,7 @@ try:
                         scroll_mode = False
                         gesture_state = "idle"
                     # выходим из «рогов»
-                    if horn_mode and not (up_cnt == 2 and idx and pinky):
+                    if horn_mode and not (idx and pinky and not thumb and not mid):
                         horn_mode = False
 
                     # клики по отпусканию
