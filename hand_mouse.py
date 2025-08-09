@@ -16,6 +16,7 @@ SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
 # меньше свободный ход — жест «рога» срабатывает быстрее и надёжнее
 HORN_DEADZONE_PX     = 5    # «свободный ход» для жеста index+pinky
 PALM_Z_DIFF_THRESH   = 0.2   # max |z_5 - z_17|, чтобы ладонь была повернута к камере
+MASK_FRAMES         = 3     # жест подтверждается после N одинаковых кадров
 
 # Частоты кадров: базовая и при активном жесте
 FPS_IDLE             = 5
@@ -45,18 +46,37 @@ horn_ref_x  = 0              # точка, откуда считаем смещ�
 
 ref_x = ref_y = 0
 trace = deque(maxlen=SMOOTHING_WINDOW)
+finger_history = deque(maxlen=MASK_FRAMES)
+confirmed_mask = (False, False, False, False, False)
 
-def fingers_up(land):
-    tips  = [4, 8, 12, 16, 20]
-    pips  = [2, 6, 10, 14, 18]
-    wrist = land.landmark[0].y
+def fingers_up(land, angle_thresh=160):
+    """Возвращает, какие пальцы выпрямлены.
+
+    Проверка выполняется по углам в MCP и PIP, что устойчиво к наклону
+    кисти относительно камеры.
+    """
+
+    def ang(a, b, c):
+        v1 = np.array([a.x - b.x, a.y - b.y, a.z - b.z])
+        v2 = np.array([c.x - b.x, c.y - b.y, c.z - b.z])
+        cosang = np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
+        return np.degrees(np.arccos(np.clip(cosang, -1.0, 1.0)))
+
+    joints = [
+        (2, 3, 4),   # thumb
+        (5, 6, 7),   # index
+        (9, 10, 11), # middle
+        (13, 14, 15),# ring
+        (17, 18, 19) # pinky
+    ]
+
     out = []
-    out.append(land.landmark[4].y < land.landmark[3].y and
-               abs(land.landmark[4].x - land.landmark[3].x) > .05)
-    for tip, pip in zip(tips[1:], pips[1:]):
-        out.append(land.landmark[tip].y < land.landmark[pip].y and
-                   land.landmark[tip].y < wrist)
-    return out  # [thumb, index, middle, ring, pinky]
+    for mcp, pip, dip in joints:
+        mcp_ang = ang(land.landmark[0], land.landmark[mcp], land.landmark[pip])
+        pip_ang = ang(land.landmark[mcp], land.landmark[pip], land.landmark[dip])
+        out.append(mcp_ang > angle_thresh and pip_ang > angle_thresh)
+
+    return tuple(out)  # (thumb, index, middle, ring, pinky)
 
 try:
     while cap.isOpened():
@@ -74,8 +94,12 @@ try:
             palm_ok = abs(hand.landmark[5].z - hand.landmark[17].z) < PALM_Z_DIFF_THRESH
 
             if palm_ok:
-                thumb, idx, mid, ring, pinky = fingers_up(hand)
-                up_cnt = thumb + idx + mid + ring + pinky
+                current_mask = fingers_up(hand)
+                finger_history.append(current_mask)
+                if len(finger_history) == MASK_FRAMES and all(m == current_mask for m in finger_history):
+                    confirmed_mask = current_mask
+                thumb, idx, mid, ring, pinky = confirmed_mask
+                up_cnt = sum(confirmed_mask)
 
                 h, w, _ = frame.shape
                 ix, iy = int(hand.landmark[8].x * w), int(hand.landmark[8].y * h)
@@ -166,6 +190,8 @@ try:
                 trace.clear()
                 scroll_trace.clear()
                 scroll_buf = 0.0
+                finger_history.clear()
+                confirmed_mask = (False, False, False, False, False)
                 gesture_state = "idle"
 
         # кулдаун
@@ -181,6 +207,8 @@ try:
             trace.clear()
             scroll_trace.clear()
             scroll_buf = 0.0
+            finger_history.clear()
+            confirmed_mask = (False, False, False, False, False)
             gesture_state = "idle"
 
         # Выход по нажатию 'q' вместо ESC
