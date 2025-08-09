@@ -14,6 +14,7 @@ SCROLL_SENSITIVITY   = 16     # сколько тиков ≈ 100 px
 SCROLL_AVG_FRAMES    = 4     # сколько последних Δy усредняем
 SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
 HORN_DEADZONE_PX     = 40    # «свободный ход» для жеста index+pinky
+PALM_Z_DIFF_THRESH   = 0.2   # max |z_5 - z_17|, чтобы ладонь была повернута к камере
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1,
@@ -64,87 +65,100 @@ try:
         res   = hands.process(rgb)
 
         if res.multi_hand_landmarks:
-            hand       = res.multi_hand_landmarks[0]
-            thumb, idx, mid, ring, pinky = fingers_up(hand)
-            up_cnt     = thumb + idx + mid + ring + pinky
+            hand = res.multi_hand_landmarks[0]
+            palm_ok = abs(hand.landmark[5].z - hand.landmark[17].z) < PALM_Z_DIFF_THRESH
 
-            h, w, _ = frame.shape
-            ix, iy  = int(hand.landmark[8].x * w),  int(hand.landmark[8].y * h)
+            if palm_ok:
+                thumb, idx, mid, ring, pinky = fingers_up(hand)
+                up_cnt = thumb + idx + mid + ring + pinky
 
-            # ===== движение курсора =====
-            if up_cnt == 1 and idx and not scroll_mode and not horn_mode:
-                if not relative_move:
+                h, w, _ = frame.shape
+                ix, iy = int(hand.landmark[8].x * w), int(hand.landmark[8].y * h)
+
+                # ===== движение курсора =====
+                if up_cnt == 1 and idx and not scroll_mode and not horn_mode:
+                    if not relative_move:
+                        ref_x, ref_y = ix, iy
+                        relative_move = True
+                        trace.clear()
+                    dx = (ix - ref_x) * SENSITIVITY
+                    dy = (iy - ref_y) * SENSITIVITY
                     ref_x, ref_y = ix, iy
-                    relative_move = True
-                    trace.clear()
-                dx = (ix - ref_x) * SENSITIVITY
-                dy = (iy - ref_y) * SENSITIVITY
-                ref_x, ref_y = ix, iy
-                trace.append((dx, dy))
-                avg_dx = sum(x for x, _ in trace) / len(trace)
-                avg_dy = sum(y for _, y in trace) / len(trace)
-                if abs(avg_dx) > .5 or abs(avg_dy) > .5:
-                    pyautogui.moveRel(avg_dx, avg_dy, _pause=False)
-                gesture_state = "move"
+                    trace.append((dx, dy))
+                    avg_dx = sum(x for x, _ in trace) / len(trace)
+                    avg_dy = sum(y for _, y in trace) / len(trace)
+                    if abs(avg_dx) > .5 or abs(avg_dy) > .5:
+                        pyautogui.moveRel(avg_dx, avg_dy, _pause=False)
+                    gesture_state = "move"
 
-            # ===== клики =====
-            elif up_cnt == 2 and idx and mid and not scroll_mode and not horn_mode:
-                gesture_state, relative_move = "two_shown", False
-            elif up_cnt == 3 and idx and mid and ring and not scroll_mode and not horn_mode:
-                gesture_state, relative_move = "three_shown", False
+                # ===== клики =====
+                elif up_cnt == 2 and idx and mid and not scroll_mode and not horn_mode:
+                    gesture_state, relative_move = "two_shown", False
+                elif up_cnt == 3 and idx and mid and ring and not scroll_mode and not horn_mode:
+                    gesture_state, relative_move = "three_shown", False
 
-            # ===== скролл (4 пальца) =====
-            elif up_cnt == 4 and idx and mid and ring and pinky and not horn_mode:
-                if not scroll_mode:                 # входим
-                    scroll_mode  = True
-                    scroll_prev_y = iy
-                    scroll_trace.clear()
-                    scroll_buf   = 0.0
-                    gesture_state = "scroll"
-                else:                               # скроллим
-                    dy_frame = iy - scroll_prev_y   # Δ за кадр
-                    scroll_prev_y = iy
+                # ===== скролл (4 пальца) =====
+                elif up_cnt == 4 and idx and mid and ring and pinky and not horn_mode:
+                    if not scroll_mode:                 # входим
+                        scroll_mode = True
+                        scroll_prev_y = iy
+                        scroll_trace.clear()
+                        scroll_buf = 0.0
+                        gesture_state = "scroll"
+                    else:                               # скроллим
+                        dy_frame = iy - scroll_prev_y   # Δ за кадр
+                        scroll_prev_y = iy
 
-                    scroll_trace.append(dy_frame)
-                    avg_dy = sum(scroll_trace) / len(scroll_trace)
+                        scroll_trace.append(dy_frame)
+                        avg_dy = sum(scroll_trace) / len(scroll_trace)
 
-                    if abs(avg_dy) > SCROLL_DEADZONE_PX:
-                        scroll_buf += avg_dy / 100 * SCROLL_SENSITIVITY
-                        steps = int(scroll_buf)
-                        if steps:
-                            pyautogui.scroll(steps)
-                            scroll_buf -= steps  # оставляем дробную часть
+                        if abs(avg_dy) > SCROLL_DEADZONE_PX:
+                            scroll_buf += avg_dy / 100 * SCROLL_SENSITIVITY
+                            steps = int(scroll_buf)
+                            if steps:
+                                pyautogui.scroll(steps)
+                                scroll_buf -= steps  # оставляем дробную часть
 
-            # ===== «рога» (index + pinky) → Ctrl+← / Ctrl+→ =====
-            elif up_cnt == 2 and idx and pinky and not scroll_mode:
-                if not horn_mode:                  # включаем режим
-                    horn_mode  = True
-                    horn_ref_x = ix
-                else:                              # смотрим смещение
-                    dx = ix - horn_ref_x
-                    if abs(dx) > HORN_DEADZONE_PX and cooldown == 0:
-                        if dx < 0:
-                            pyautogui.hotkey('ctrl', 'right')
-                        else:
-                            pyautogui.hotkey('ctrl', 'left')
-                        cooldown, horn_mode = 10, False  # ждём и выходим
+                # ===== «рога» (index + pinky) → Ctrl+← / Ctrl+→ =====
+                elif up_cnt == 2 and idx and pinky and not scroll_mode:
+                    if not horn_mode:                  # включаем режим
+                        horn_mode = True
+                        horn_ref_x = ix
+                    else:                              # смотрим смещение
+                        dx = ix - horn_ref_x
+                        if abs(dx) > HORN_DEADZONE_PX and cooldown == 0:
+                            if dx < 0:
+                                pyautogui.hotkey('ctrl', 'right')
+                            else:
+                                pyautogui.hotkey('ctrl', 'left')
+                            cooldown, horn_mode = 10, False  # ждём и выходим
 
+                else:
+                    # выходим из скролла
+                    if scroll_mode and not (up_cnt == 4 and idx and mid and ring and pinky):
+                        scroll_mode = False
+                        gesture_state = "idle"
+                    # выходим из «рогов»
+                    if horn_mode and not (up_cnt == 2 and idx and pinky):
+                        horn_mode = False
+
+                    # клики по отпусканию
+                    if gesture_state == "two_shown" and not (idx or mid) and cooldown == 0:
+                        pyautogui.click()
+                        cooldown, gesture_state = 10, "idle"
+                    elif gesture_state == "three_shown" and not (idx or mid or ring) and cooldown == 0:
+                        pyautogui.click(button='right')
+                        cooldown, gesture_state = 10, "idle"
             else:
-                # выходим из скролла
-                if scroll_mode and not (up_cnt == 4 and idx and mid and ring and pinky):
+                relative_move = False
+                if scroll_mode:
                     scroll_mode = False
-                    gesture_state = "idle"
-                # выходим из «рогов»
-                if horn_mode and not (up_cnt == 2 and idx and pinky):
+                if horn_mode:
                     horn_mode = False
-
-                # клики по отпусканию
-                if gesture_state == "two_shown" and not (idx or mid) and cooldown == 0:
-                    pyautogui.click()
-                    cooldown, gesture_state = 10, "idle"
-                elif gesture_state == "three_shown" and not (idx or mid or ring) and cooldown == 0:
-                    pyautogui.click(button='right')
-                    cooldown, gesture_state = 10, "idle"
+                trace.clear()
+                scroll_trace.clear()
+                scroll_buf = 0.0
+                gesture_state = "idle"
 
         # кулдаун
         if cooldown:
