@@ -8,10 +8,10 @@ import time
 SCREEN_W, SCREEN_H = pyautogui.size()
 
 # — настройки —
-SENSITIVITY          = 4.0   # курсор
-SMOOTHING_WINDOW     = 7
-SCROLL_SENSITIVITY   = 16     # сколько тиков ≈ 100 px
-SCROLL_AVG_FRAMES    = 4     # сколько последних Δy усредняем
+SENSITIVITY          = 6.0   # курсор
+SMOOTHING_WINDOW     = 14
+SCROLL_SENSITIVITY   = 24     # сколько тиков ≈ 100 px
+SCROLL_AVG_FRAMES    = 10     # сколько последних Δy усредняем
 SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
 # меньше свободный ход — жест «рога» срабатывает быстрее и надёжнее
 HORN_DEADZONE_PX     = 5    # «свободный ход» для жеста index+pinky
