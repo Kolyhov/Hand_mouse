@@ -14,7 +14,7 @@ SCROLL_SENSITIVITY   = 16     # сколько тиков ≈ 100 px
 SCROLL_AVG_FRAMES    = 4     # сколько последних Δy усредняем
 SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
 # меньше свободный ход — жест «рога» срабатывает быстрее и надёжнее
-HORN_DEADZONE_PX     = 20    # «свободный ход» для жеста index+pinky
+HORN_DEADZONE_PX     = 5    # «свободный ход» для жеста index+pinky
 PALM_Z_DIFF_THRESH   = 0.2   # max |z_5 - z_17|, чтобы ладонь была повернута к камере
 
 mp_hands = mp.solutions.hands
