@@ -3,13 +3,14 @@ import numpy as np
 import mediapipe as mp
 import pyautogui
 from collections import deque
+import time
 
 SCREEN_W, SCREEN_H = pyautogui.size()
 
 # — настройки —
-SENSITIVITY          = 3.0   # курсор
+SENSITIVITY          = 4.0   # курсор
 SMOOTHING_WINDOW     = 7
-SCROLL_SENSITIVITY   = 8     # сколько тиков ≈ 100 px
+SCROLL_SENSITIVITY   = 16     # сколько тиков ≈ 100 px
 SCROLL_AVG_FRAMES    = 4     # сколько последних Δy усредняем
 SCROLL_DEADZONE_PX   = 2     # игнорируем дрожь < 2 px
 HORN_DEADZONE_PX     = 40    # «свободный ход» для жеста index+pinky
@@ -20,6 +21,8 @@ hands = mp_hands.Hands(max_num_hands=1,
                        min_tracking_confidence=0.7)
 
 cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 
 gesture_state = "idle"
 cooldown      = 0
@@ -51,6 +54,7 @@ def fingers_up(land):
 
 try:
     while cap.isOpened():
+        start_time = time.time()
         ok, frame = cap.read()
         if not ok:
             continue
@@ -160,6 +164,12 @@ try:
         # Выход по нажатию 'q' вместо ESC
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
+        # Ограничение частоты кадров до 10 FPS
+        elapsed = time.time() - start_time
+        sleep_time = max(0, 0.1 - elapsed)
+        if sleep_time > 0:
+            time.sleep(sleep_time)
 
 except KeyboardInterrupt:
     print("Программа остановлена пользователем")
