@@ -167,7 +167,7 @@ try:
                     app_mode = 'sleep'
                     overlay.hide()
             else:  # keyboard
-                if keyboard_overlay.root is None:
+                if not keyboard_overlay.is_visible():
                     app_mode = 'overlay'
                     overlay.show()
                     mode_selector.set_mode(None)
